@@ -1,0 +1,14 @@
+with-expecter: true
+filename: "{{.InterfaceNameSnake}}.go"
+outpkg: "mock{{.PackageName}}"
+mockname: "{{.InterfaceName}}"
+dir: internal/mocks/{{replaceAll .InterfaceDirRelative "internal" ""}}
+packages:
+  avito-shop-service/internal/api:
+    interfaces:
+      Service:
+  avito-shop-service/internal/service:
+    interfaces:
+      Repository:
+      Tokenizer:
+      Encryptor:
