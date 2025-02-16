@@ -126,21 +126,15 @@ func (r *Repository) SwapBalance(ctx context.Context, fromUser, toUser string, a
 }
 
 func (r *Repository) Balance(ctx context.Context, username string) (int64, error) {
+	query := `select amount from balance where username = $1`
+
 	var balance int64
 
-	tx, err := r.pool.Begin(ctx)
+	err := r.pool.QueryRow(ctx, query, username).Scan(&balance)
 	if err != nil {
-		return balance, errors.WithStack(err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	balance, err = r.balance(ctx, tx, username)
-	if err != nil {
-		return balance, errors.WithStack(err)
-	}
-
-	err = tx.Commit(ctx)
-	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return balance, model.ErrUserNotFound
+		}
 		return balance, errors.WithStack(err)
 	}
 
@@ -148,40 +142,47 @@ func (r *Repository) Balance(ctx context.Context, username string) (int64, error
 }
 
 func (r *Repository) Inventory(ctx context.Context, username string) ([]model.Inventory, error) {
-	tx, err := r.pool.Begin(ctx)
+	query := `
+	select item_name, quantity from inventory
+	where username = $1`
+
+	rows, err := r.pool.Query(ctx, query, username)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
 
-	inventory, err := r.inventory(ctx, tx, username)
-	if err != nil {
-		return nil, err
-	}
-
-	err = tx.Commit(ctx)
+	inventoryRows, err := pgx.CollectRows[inventoryRow](rows, pgx.RowToStructByNameLax[inventoryRow])
 	if err != nil {
 		return nil, errors.WithStack(err)
+	}
+
+	inventory := make([]model.Inventory, 0, len(inventoryRows))
+	for _, row := range inventoryRows {
+		inventory = append(inventory, r.inventoryModel(row))
 	}
 
 	return inventory, nil
 }
 
 func (r *Repository) Transaction(ctx context.Context, username string) ([]model.Transaction, error) {
-	tx, err := r.pool.Begin(ctx)
+	query := `
+	select "from", "to", amount
+	from transaction
+	where $1 in ("from", "to")`
+
+	rows, err := r.pool.Query(ctx, query, username)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
 
-	transactions, err := r.transaction(ctx, tx, username)
-	if err != nil {
-		return nil, err
-	}
-
-	err = tx.Commit(ctx)
+	transactionRows, err := pgx.CollectRows[transactionRow](rows, pgx.RowToStructByNameLax[transactionRow])
 	if err != nil {
 		return nil, errors.WithStack(err)
+	}
+
+	transactions := make([]model.Transaction, 0, len(transactionRows))
+	for _, row := range transactionRows {
+		transactions = append(transactions, r.transactionModel(row))
 	}
 
 	return transactions, nil
@@ -189,16 +190,16 @@ func (r *Repository) Transaction(ctx context.Context, username string) ([]model.
 
 func (r *Repository) swapBalance(ctx context.Context, tx pgx.Tx, fromUser, toUser string, amount int) error {
 	query := `
-	with t as (insert into transaction ("from", "to", amount)
-	           values ($1, $2, $3))
-	update balance b
-	set amount = u.amount
-	from (select username,
-	             case when username = $1 then amount - $3 else amount + $3 end amount
-	      from balance
-	      where username in ($1, $2) for update) u
-	where b.username = u.username
-	returning b.username, b.amount`
+		with t as (insert into transaction ("from", "to", amount)
+				   values ($1, $2, $3))
+		update balance b
+		set amount = u.amount
+		from (select username,
+					 case when username = $1 then amount - $3 else amount + $3 end,amount
+			  from balance
+			  where username in ($1, $2) for update) u
+		where b.username = u.username
+		returning b.username, b.amount`
 
 	rows, err := tx.Query(ctx, query, fromUser, toUser, amount)
 	if err != nil {
@@ -226,22 +227,6 @@ func (r *Repository) swapBalance(ctx context.Context, tx pgx.Tx, fromUser, toUse
 
 	return nil
 
-}
-
-func (r *Repository) balance(ctx context.Context, tx pgx.Tx, username string) (int64, error) {
-	query := `select amount from balance where username = $1`
-
-	var balance int64
-
-	err := tx.QueryRow(ctx, query, username).Scan(&balance)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return balance, model.ErrUserNotFound
-		}
-		return balance, errors.WithStack(err)
-	}
-
-	return balance, nil
 }
 
 func (r *Repository) updateBalance(ctx context.Context, tx pgx.Tx, username string, itemName string) error {
@@ -281,54 +266,6 @@ func (r *Repository) updateBalance(ctx context.Context, tx pgx.Tx, username stri
 	}
 
 	return nil
-}
-
-func (r *Repository) inventory(ctx context.Context, tx pgx.Tx, username string) ([]model.Inventory, error) {
-	query := `
-	select item_name, quantity from inventory
-	where username = $1`
-
-	rows, err := tx.Query(ctx, query, username)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	inventoryRows, err := pgx.CollectRows[inventoryRow](rows, pgx.RowToStructByNameLax[inventoryRow])
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	inventory := make([]model.Inventory, 0, len(inventoryRows))
-	for _, row := range inventoryRows {
-		inventory = append(inventory, r.inventoryModel(row))
-	}
-
-	return inventory, nil
-
-}
-
-func (r *Repository) transaction(ctx context.Context, tx pgx.Tx, username string) ([]model.Transaction, error) {
-	query := `
-	select "from", "to", amount
-	from transaction
-	where $1 in ("from", "to")`
-
-	rows, err := tx.Query(ctx, query, username)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	transactionRows, err := pgx.CollectRows[transactionRow](rows, pgx.RowToStructByNameLax[transactionRow])
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	transactions := make([]model.Transaction, 0, len(transactionRows))
-	for _, row := range transactionRows {
-		transactions = append(transactions, r.transactionModel(row))
-	}
-
-	return transactions, nil
 }
 
 func (r *Repository) userModel(row userRow) model.User {
