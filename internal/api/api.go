@@ -31,9 +31,9 @@ func (a *API) PostApiAuth(ctx context.Context, request PostApiAuthRequestObject)
 	token, err := a.service.Login(ctx, request.Body.Username, request.Body.Password)
 	if err != nil {
 		if errors.Is(err, model.ErrUserUnauthorized) {
-			return PostApiAuth401JSONResponse{Errors: "Неавторизован."}, err
+			return PostApiAuth401JSONResponse{Errors: "Неавторизован."}, nil
 		}
-		return PostApiAuth500JSONResponse{Errors: "Внутренняя ошибка сервера."}, err
+		return nil, err
 	}
 
 	return PostApiAuth200JSONResponse{Token: &token}, nil
@@ -44,15 +44,15 @@ func (a *API) PostApiBuy(ctx context.Context, request PostApiBuyRequestObject) (
 
 	username, ok := v.(string)
 	if !ok {
-		return PostApiBuy500JSONResponse{Errors: "Внутренняя ошибка сервера."}, errors.New("username not found in context")
+		return nil, errors.New("username not found in context")
 	}
 
 	err := a.service.BuyItem(ctx, username, request.Body.Item)
 	if err != nil {
 		if errors.IsAny(err, model.ErrItemNotFound, model.ErrNegativeBalance) {
-			return PostApiBuy400JSONResponse{Errors: "Неверный запрос."}, err
+			return PostApiBuy400JSONResponse{Errors: "Неверный запрос."}, nil
 		}
-		return PostApiBuy500JSONResponse{Errors: "Внутренняя ошибка сервера."}, err
+		return nil, err
 	}
 
 	return PostApiBuy200Response{}, nil
@@ -63,22 +63,22 @@ func (a *API) GetApiInfo(ctx context.Context, _ GetApiInfoRequestObject) (GetApi
 
 	username, ok := v.(string)
 	if !ok {
-		return GetApiInfo500JSONResponse{Errors: "Внутренняя ошибка сервера."}, errors.New("username not found in context")
+		return nil, errors.New("username not found in context")
 	}
 
 	balance, err := a.service.Balance(ctx, username)
 	if err != nil {
-		return GetApiInfo500JSONResponse{Errors: "Внутренняя ошибка сервера."}, err
+		return nil, err
 	}
 
 	inventory, err := a.service.Inventory(ctx, username)
 	if err != nil {
-		return GetApiInfo500JSONResponse{Errors: "Внутренняя ошибка сервера."}, err
+		return nil, err
 	}
 
 	transactions, err := a.service.Transaction(ctx, username)
 	if err != nil {
-		return GetApiInfo500JSONResponse{Errors: "Внутренняя ошибка сервера."}, err
+		return nil, err
 	}
 
 	resp := buildInfoResponse(username, balance, transactions, inventory)
@@ -91,15 +91,15 @@ func (a *API) PostApiSendCoin(ctx context.Context, request PostApiSendCoinReques
 
 	fromUser, ok := v.(string)
 	if !ok {
-		return PostApiSendCoin500JSONResponse{Errors: "Внутренняя ошибка сервера."}, errors.New("username not found in context")
+		return nil, errors.New("username not found in context")
 	}
 
 	err := a.service.SendCoin(ctx, fromUser, request.Body.ToUser, request.Body.Amount)
 	if err != nil {
 		if errors.Is(err, model.ErrNegativeBalance) {
-			return PostApiSendCoin400JSONResponse{Errors: "Неверный запрос."}, err
+			return PostApiSendCoin400JSONResponse{Errors: "Неверный запрос."}, nil
 		}
-		return PostApiSendCoin500JSONResponse{Errors: "Внутренняя ошибка сервера."}, err
+		return nil, err
 	}
 
 	return PostApiSendCoin200Response{}, nil

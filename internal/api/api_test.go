@@ -2,14 +2,21 @@ package api_test
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"avito-shop-service/internal/api"
+	"avito-shop-service/internal/logutil"
 	mockapi "avito-shop-service/internal/mocks/api"
 	"avito-shop-service/internal/model"
 )
+
+func TestMain(m *testing.M) {
+	logutil.Setup()
+	os.Exit(m.Run())
+}
 
 func TestAPI_PostApiAuth(t *testing.T) {
 	s := mockapi.NewService(t)

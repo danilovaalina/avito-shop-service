@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/cockroachdb/errors"
@@ -15,6 +16,7 @@ import (
 
 func TestMain(m *testing.M) {
 	logutil.Setup()
+	os.Exit(m.Run())
 }
 
 func TestService_LoginAgain(t *testing.T) {

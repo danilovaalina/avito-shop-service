@@ -17,7 +17,6 @@ import (
 
 func LoggerMiddleware() echo.MiddlewareFunc {
 	return echomiddleware.RequestLoggerWithConfig(echomiddleware.RequestLoggerConfig{
-		LogError: true,
 		LogValuesFunc: func(c echo.Context, v echomiddleware.RequestLoggerValues) error {
 			if v.Error != nil {
 				log.Error().Stack().Err(v.Error).Send()
@@ -25,8 +24,11 @@ func LoggerMiddleware() echo.MiddlewareFunc {
 
 			return nil
 		},
+		HandleError: true,
+		LogError:    true,
 	})
 }
+
 func JWTParser() echo.MiddlewareFunc {
 	return echojwt.WithConfig(echojwt.Config{
 		SigningKey: []byte("secret"),
@@ -51,6 +53,14 @@ func ValidatorMiddleware() (echo.MiddlewareFunc, error) {
 	})
 
 	return validator, nil
+}
+
+func ErrHandler(_ error, c echo.Context) {
+	if c.Response().Committed {
+		return
+	}
+
+	_ = c.JSON(http.StatusInternalServerError, echo.Map{"errors": "Внутренняя ошибка сервера."})
 }
 
 func jwtValidator(ctx context.Context, input *openapi3filter.AuthenticationInput) error {

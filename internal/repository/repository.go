@@ -190,16 +190,16 @@ func (r *Repository) Transaction(ctx context.Context, username string) ([]model.
 
 func (r *Repository) swapBalance(ctx context.Context, tx pgx.Tx, fromUser, toUser string, amount int) error {
 	query := `
-		with t as (insert into transaction ("from", "to", amount)
-				   values ($1, $2, $3))
-		update balance b
-		set amount = u.amount
-		from (select username,
-					 case when username = $1 then amount - $3 else amount + $3 end,amount
-			  from balance
-			  where username in ($1, $2) for update) u
-		where b.username = u.username
-		returning b.username, b.amount`
+	with t as (insert into transaction ("from", "to", amount)
+	           values ($1, $2, $3))
+	update balance b
+	set amount = u.amount
+	from (select username,
+	             case when username = $1 then amount - $3 else amount + $3 end amount
+	      from balance
+	      where username in ($1, $2) for update) u
+	where b.username = u.username
+	returning b.username, b.amount`
 
 	rows, err := tx.Query(ctx, query, fromUser, toUser, amount)
 	if err != nil {
@@ -210,7 +210,7 @@ func (r *Repository) swapBalance(ctx context.Context, tx pgx.Tx, fromUser, toUse
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) {
-			if pgErr.Code == "23503" { // TODO: ConstraintName check.
+			if pgErr.Code == "transaction_to_fkey" {
 				return model.ErrUserNotFound
 			}
 		}
@@ -254,7 +254,7 @@ func (r *Repository) updateBalance(ctx context.Context, tx pgx.Tx, username stri
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) {
-			if pgErr.Code == "" { // TODO: ConstraintName check.
+			if pgErr.ConstraintName == "inventory_item_name_fkey" {
 				return model.ErrItemNotFound
 			}
 		}

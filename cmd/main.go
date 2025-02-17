@@ -31,6 +31,7 @@ func main() {
 	a := api.New(service.New(repository.New(pool), service.NewJWT(), service.NewBcrypt()))
 
 	e := echo.New()
+	e.HTTPErrorHandler = api.ErrHandler
 	api.RegisterHandlers(e, api.NewStrictHandler(a, nil))
 
 	e.Use(api.LoggerMiddleware())

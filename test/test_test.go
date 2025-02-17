@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -16,14 +17,13 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"avito-shop-service/internal/api"
-	"avito-shop-service/internal/logutil"
 	"avito-shop-service/internal/postgres"
 	"avito-shop-service/internal/repository"
 	"avito-shop-service/internal/service"
 )
 
 func TestMain(m *testing.M) {
-	logutil.Setup()
+	os.Exit(m.Run())
 }
 
 func TestBuyItem(t *testing.T) {
@@ -71,14 +71,14 @@ func TestBuyItem(t *testing.T) {
 	require.Equal(t, 1, len(*infoResp.JSON200.CoinHistory.Sent))
 	require.Equal(t, 1, len(*infoResp.JSON200.Inventory))
 
-	require.Equal(t, 1000, *(*infoResp.JSON200.CoinHistory.Received)[0].Amount)
-	require.Equal(t, "registration_gift", *(*infoResp.JSON200.CoinHistory.Received)[0].FromUser)
+	require.Equal(t, 1000, (*infoResp.JSON200.CoinHistory.Received)[0].Amount)
+	require.Equal(t, "registration_gift", (*infoResp.JSON200.CoinHistory.Received)[0].FromUser)
 
-	require.Equal(t, 20, *(*infoResp.JSON200.CoinHistory.Sent)[0].Amount)
-	require.Equal(t, "buy_item", *(*infoResp.JSON200.CoinHistory.Sent)[0].ToUser)
+	require.Equal(t, 20, (*infoResp.JSON200.CoinHistory.Sent)[0].Amount)
+	require.Equal(t, "buy_item", (*infoResp.JSON200.CoinHistory.Sent)[0].ToUser)
 
-	require.Equal(t, 1, *(*infoResp.JSON200.Inventory)[0].Quantity)
-	require.Equal(t, "cup", *(*infoResp.JSON200.Inventory)[0].Type)
+	require.Equal(t, 1, (*infoResp.JSON200.Inventory)[0].Quantity)
+	require.Equal(t, "cup", (*infoResp.JSON200.Inventory)[0].Type)
 }
 
 func TestSendCoin(t *testing.T) {
@@ -138,13 +138,13 @@ func TestSendCoin(t *testing.T) {
 	require.Equal(t, 1, len(*infoResp.JSON200.CoinHistory.Sent))
 	require.Equal(t, 0, len(*infoResp.JSON200.Inventory))
 
-	require.Equal(t, 1000, *(*infoResp.JSON200.CoinHistory.Received)[0].Amount)
-	require.Equal(t, "registration_gift", *(*infoResp.JSON200.CoinHistory.Received)[0].FromUser)
+	require.Equal(t, 1000, (*infoResp.JSON200.CoinHistory.Received)[0].Amount)
+	require.Equal(t, "registration_gift", (*infoResp.JSON200.CoinHistory.Received)[0].FromUser)
 
-	require.Equal(t, 500, *(*infoResp.JSON200.CoinHistory.Sent)[0].Amount)
-	require.Equal(t, "receiver", *(*infoResp.JSON200.CoinHistory.Sent)[0].ToUser)
+	require.Equal(t, 500, (*infoResp.JSON200.CoinHistory.Sent)[0].Amount)
+	require.Equal(t, "receiver", (*infoResp.JSON200.CoinHistory.Sent)[0].ToUser)
 
-	require.Equal(t, 500, *infoResp.JSON200.Coins)
+	require.Equal(t, 500, infoResp.JSON200.Coins)
 
 	infoResp, err = client.GetApiInfoWithResponse(ctx, withToken(*receiverResp.JSON200.Token))
 	require.NoError(t, err)
@@ -160,13 +160,13 @@ func TestSendCoin(t *testing.T) {
 	require.Equal(t, 0, len(*infoResp.JSON200.CoinHistory.Sent))
 	require.Equal(t, 0, len(*infoResp.JSON200.Inventory))
 
-	require.Equal(t, 1000, *(*infoResp.JSON200.CoinHistory.Received)[0].Amount)
-	require.Equal(t, "registration_gift", *(*infoResp.JSON200.CoinHistory.Received)[0].FromUser)
+	require.Equal(t, 1000, (*infoResp.JSON200.CoinHistory.Received)[0].Amount)
+	require.Equal(t, "registration_gift", (*infoResp.JSON200.CoinHistory.Received)[0].FromUser)
 
-	require.Equal(t, 500, *(*infoResp.JSON200.CoinHistory.Received)[1].Amount)
-	require.Equal(t, "sender", *(*infoResp.JSON200.CoinHistory.Received)[1].FromUser)
+	require.Equal(t, 500, (*infoResp.JSON200.CoinHistory.Received)[1].Amount)
+	require.Equal(t, "sender", (*infoResp.JSON200.CoinHistory.Received)[1].FromUser)
 
-	require.Equal(t, 1500, *infoResp.JSON200.Coins)
+	require.Equal(t, 1500, infoResp.JSON200.Coins)
 }
 
 func setupServer(ctx context.Context) (string, func(context.Context), error) {
@@ -184,6 +184,7 @@ func setupServer(ctx context.Context) (string, func(context.Context), error) {
 	a := api.New(service.New(repository.New(pool), service.NewJWT(), service.NewBcrypt()))
 
 	e := echo.New()
+	e.HTTPErrorHandler = api.ErrHandler
 	api.RegisterHandlers(e, api.NewStrictHandler(a, nil))
 
 	e.Use(api.JWTParser())
