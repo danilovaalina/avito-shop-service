@@ -87,3 +87,22 @@ func TestAPI_PostGetApiInfo(t *testing.T) {
 
 	require.NoError(t, err)
 }
+
+func TestAPI_PostApiSendCoin(t *testing.T) {
+	s := mockapi.NewService(t)
+	ctx := context.WithValue(context.Background(), "username", "user")
+	s.EXPECT().SendCoin(ctx, "user", "testuser", 500).Return(nil).Once()
+
+	req := api.PostApiSendCoinRequestObject{
+		Body: &api.PostApiSendCoinJSONRequestBody{
+			Amount: 500,
+			ToUser: "testuser",
+		},
+	}
+	a := api.New(s)
+
+	resp, err := a.PostApiSendCoin(ctx, req)
+
+	require.NoError(t, err)
+	require.Equal(t, api.PostApiSendCoin200Response{}, resp)
+}
