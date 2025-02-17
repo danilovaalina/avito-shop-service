@@ -22,17 +22,18 @@ type API struct {
 }
 
 func New(service Service) *API {
-	return &API{service: service}
+	return &API{
+		service: service,
+	}
 }
 
 func (a *API) PostApiAuth(ctx context.Context, request PostApiAuthRequestObject) (PostApiAuthResponseObject, error) {
 	token, err := a.service.Login(ctx, request.Body.Username, request.Body.Password)
-
 	if err != nil {
 		if errors.Is(err, model.ErrUserUnauthorized) {
-			return PostApiAuth401JSONResponse{Errors: ptrString(err.Error())}, nil
+			return PostApiAuth401JSONResponse{Errors: "Неавторизован."}, err
 		}
-		return PostApiAuth400JSONResponse{Errors: ptrString(err.Error())}, nil
+		return PostApiAuth500JSONResponse{Errors: "Внутренняя ошибка сервера."}, err
 	}
 
 	return PostApiAuth200JSONResponse{Token: &token}, nil
@@ -43,37 +44,41 @@ func (a *API) PostApiBuy(ctx context.Context, request PostApiBuyRequestObject) (
 
 	username, ok := v.(string)
 	if !ok {
-		return PostApiBuy500JSONResponse{Errors: ptrString("invalid username format")}, nil
+		return PostApiBuy500JSONResponse{Errors: "Внутренняя ошибка сервера."}, errors.New("username not found in context")
 	}
 
 	err := a.service.BuyItem(ctx, username, request.Body.Item)
 	if err != nil {
-		return PostApiBuy400JSONResponse{Errors: ptrString(err.Error())}, nil
+		if errors.IsAny(err, model.ErrItemNotFound, model.ErrNegativeBalance) {
+			return PostApiBuy400JSONResponse{Errors: "Неверный запрос."}, err
+		}
+		return PostApiBuy500JSONResponse{Errors: "Внутренняя ошибка сервера."}, err
 	}
+
 	return PostApiBuy200Response{}, nil
 }
 
-func (a *API) GetApiInfo(ctx context.Context, request GetApiInfoRequestObject) (GetApiInfoResponseObject, error) {
+func (a *API) GetApiInfo(ctx context.Context, _ GetApiInfoRequestObject) (GetApiInfoResponseObject, error) {
 	v := ctx.Value("username")
 
 	username, ok := v.(string)
 	if !ok {
-		return GetApiInfo500JSONResponse{Errors: ptrString("invalid username format")}, nil
+		return GetApiInfo500JSONResponse{Errors: "Внутренняя ошибка сервера."}, errors.New("username not found in context")
 	}
 
 	balance, err := a.service.Balance(ctx, username)
 	if err != nil {
-		return GetApiInfo500JSONResponse{Errors: ptrString(err.Error())}, nil
+		return GetApiInfo500JSONResponse{Errors: "Внутренняя ошибка сервера."}, err
 	}
 
 	inventory, err := a.service.Inventory(ctx, username)
 	if err != nil {
-		return GetApiInfo500JSONResponse{Errors: ptrString(err.Error())}, nil
+		return GetApiInfo500JSONResponse{Errors: "Внутренняя ошибка сервера."}, err
 	}
 
 	transactions, err := a.service.Transaction(ctx, username)
 	if err != nil {
-		return GetApiInfo500JSONResponse{Errors: ptrString(err.Error())}, nil
+		return GetApiInfo500JSONResponse{Errors: "Внутренняя ошибка сервера."}, err
 	}
 
 	resp := buildInfoResponse(username, balance, transactions, inventory)
@@ -86,64 +91,59 @@ func (a *API) PostApiSendCoin(ctx context.Context, request PostApiSendCoinReques
 
 	fromUser, ok := v.(string)
 	if !ok {
-		return PostApiSendCoin500JSONResponse{Errors: ptrString("invalid username format")}, nil
+		return PostApiSendCoin500JSONResponse{Errors: "Внутренняя ошибка сервера."}, errors.New("username not found in context")
 	}
 
 	err := a.service.SendCoin(ctx, fromUser, request.Body.ToUser, request.Body.Amount)
 	if err != nil {
-		return PostApiSendCoin400JSONResponse{Errors: ptrString(err.Error())}, nil
+		if errors.Is(err, model.ErrNegativeBalance) {
+			return PostApiSendCoin400JSONResponse{Errors: "Неверный запрос."}, err
+		}
+		return PostApiSendCoin500JSONResponse{Errors: "Внутренняя ошибка сервера."}, err
 	}
 
 	return PostApiSendCoin200Response{}, nil
 }
 
-func ptrString(s string) *string {
-	return &s
-}
-
-func ptrInt(i int) *int {
-	return &i
-}
-
 func buildInfoResponse(username string, coins int64, transactions []model.Transaction, inventory []model.Inventory) InfoResponse {
 	received := make([]struct {
-		Amount   *int    `json:"amount,omitempty"`
-		FromUser *string `json:"fromUser,omitempty"`
+		Amount   int    `json:"amount"`
+		FromUser string `json:"fromUser"`
 	}, 0)
 
 	sent := make([]struct {
-		Amount *int    `json:"amount,omitempty"`
-		ToUser *string `json:"toUser,omitempty"`
+		Amount int    `json:"amount"`
+		ToUser string `json:"toUser"`
 	}, 0)
 
 	for _, transaction := range transactions {
 		if transaction.ToUser == username {
 			received = append(received, struct {
-				Amount   *int    `json:"amount,omitempty"`
-				FromUser *string `json:"fromUser,omitempty"`
+				Amount   int    `json:"amount"`
+				FromUser string `json:"fromUser"`
 			}{
-				Amount:   ptrInt(int(transaction.Amount)),
-				FromUser: ptrString(transaction.FromUser),
+				Amount:   int(transaction.Amount),
+				FromUser: transaction.FromUser,
 			})
 		} else if transaction.FromUser == username {
 			sent = append(sent, struct {
-				Amount *int    `json:"amount,omitempty"`
-				ToUser *string `json:"toUser,omitempty"`
+				Amount int    `json:"amount"`
+				ToUser string `json:"toUser"`
 			}{
-				Amount: ptrInt(int(transaction.Amount)),
-				ToUser: ptrString(transaction.ToUser),
+				Amount: int(transaction.Amount),
+				ToUser: transaction.ToUser,
 			})
 		}
 	}
 
 	coinHistory := &struct {
 		Received *[]struct {
-			Amount   *int    `json:"amount,omitempty"`
-			FromUser *string `json:"fromUser,omitempty"`
+			Amount   int    `json:"amount"`
+			FromUser string `json:"fromUser"`
 		} `json:"received,omitempty"`
 		Sent *[]struct {
-			Amount *int    `json:"amount,omitempty"`
-			ToUser *string `json:"toUser,omitempty"`
+			Amount int    `json:"amount"`
+			ToUser string `json:"toUser"`
 		} `json:"sent,omitempty"`
 	}{
 		Received: &received,
@@ -151,23 +151,23 @@ func buildInfoResponse(username string, coins int64, transactions []model.Transa
 	}
 
 	inventoryResponse := make([]struct {
-		Quantity *int    `json:"quantity,omitempty"`
-		Type     *string `json:"type,omitempty"`
+		Quantity int    `json:"quantity"`
+		Type     string `json:"type"`
 	}, len(inventory))
 
 	for i, item := range inventory {
 		inventoryResponse[i] = struct {
-			Quantity *int    `json:"quantity,omitempty"`
-			Type     *string `json:"type,omitempty"`
+			Quantity int    `json:"quantity"`
+			Type     string `json:"type"`
 		}{
-			Quantity: ptrInt(int(item.Quantity)),
-			Type:     ptrString(item.ItemName),
+			Quantity: int(item.Quantity),
+			Type:     item.ItemName,
 		}
 	}
 
 	return InfoResponse{
 		CoinHistory: coinHistory,
-		Coins:       ptrInt(int(coins)),
+		Coins:       int(coins),
 		Inventory:   &inventoryResponse,
 	}
 }

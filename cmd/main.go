@@ -33,6 +33,7 @@ func main() {
 	e := echo.New()
 	api.RegisterHandlers(e, api.NewStrictHandler(a, nil))
 
+	e.Use(api.LoggerMiddleware())
 	e.Use(api.JWTParser())
 
 	v, err := api.ValidatorMiddleware()

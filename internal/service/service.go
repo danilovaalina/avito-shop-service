@@ -52,11 +52,14 @@ func (s *Service) Login(ctx context.Context, username, password string) (string,
 
 	if errors.Is(err, model.ErrUserNotFound) {
 		user, err = s.createUser(ctx, username, password)
+		if err != nil {
+			return "", err
+		}
 	} else {
 		err = s.encryptor.Verify(user.PasswordHash, password)
-	}
-	if err != nil {
-		return "", err
+		if err != nil {
+			return "", errors.Join(err, model.ErrUserUnauthorized)
+		}
 	}
 
 	token, err := s.tokenizer.CreateToken(username)

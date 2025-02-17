@@ -167,6 +167,9 @@ components:
               quantity:
                 type: integer
                 description: Количество предметов.
+            required:
+              - type
+              - quantity
         coinHistory:
           type: object
           properties:
@@ -181,6 +184,9 @@ components:
                   amount:
                     type: integer
                     description: Количество полученных монет.
+                required:
+                  - fromUser
+                  - amount
             sent:
               type: array
               items:
@@ -192,6 +198,11 @@ components:
                   amount:
                     type: integer
                     description: Количество отправленных монет.
+                required:
+                  - toUser
+                  - amount
+      required:
+        - coins
 
     ErrorResponse:
       type: object
@@ -199,6 +210,8 @@ components:
         errors:
           type: string
           description: Сообщение об ошибке, описывающее проблему.
+      required:
+        - errors
 
     AuthRequest:
       type: object

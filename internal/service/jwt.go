@@ -3,11 +3,11 @@ package service
 import (
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/golang-jwt/jwt/v5"
 )
 
-type JWT struct {
-}
+type JWT struct{}
 
 func NewJWT() *JWT {
 	return &JWT{}
@@ -23,5 +23,10 @@ func (j *JWT) CreateToken(username string) (string, error) {
 
 	secret := []byte("secret")
 
-	return token.SignedString(secret)
+	s, err := token.SignedString(secret)
+	if err != nil {
+		return "", errors.WithStack(err)
+	}
+
+	return s, nil
 }
