@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"net/http"
-	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/getkin/kin-openapi/openapi3filter"
@@ -46,7 +45,7 @@ func ValidatorMiddleware() (echo.MiddlewareFunc, error) {
 
 	validator := middleware.OapiRequestValidatorWithOptions(spec, &middleware.Options{
 		Options: openapi3filter.Options{
-			AuthenticationFunc: jwtValidator,
+			AuthenticationFunc: processJWT,
 		},
 		SilenceServersWarning: true,
 		Skipper:               skipper,
@@ -55,36 +54,28 @@ func ValidatorMiddleware() (echo.MiddlewareFunc, error) {
 	return validator, nil
 }
 
-func ErrHandler(_ error, c echo.Context) {
+func ErrHandler(err error, c echo.Context) {
 	if c.Response().Committed {
+		return
+	}
+
+	var he *echo.HTTPError
+	if errors.As(err, &he) {
+		_ = c.JSON(he.Code, echo.Map{"errors": he.Message})
 		return
 	}
 
 	_ = c.JSON(http.StatusInternalServerError, echo.Map{"errors": "Внутренняя ошибка сервера."})
 }
 
-func jwtValidator(ctx context.Context, input *openapi3filter.AuthenticationInput) error {
+func processJWT(ctx context.Context, input *openapi3filter.AuthenticationInput) error {
 	c := middleware.GetEchoContext(ctx)
 
 	user := c.Get("user").(*jwt.Token)
-	if user == nil {
-		return echo.NewHTTPError(http.StatusUnauthorized, "Токен отсутствует")
-	}
 
-	claims, ok := user.Claims.(jwt.MapClaims)
-	if !ok {
-		return echo.NewHTTPError(http.StatusUnauthorized, "Неверный формат токена")
-	}
+	claims, _ := user.Claims.(jwt.MapClaims)
 
-	username, ok := claims["username"].(string)
-	if !ok || username == "" {
-		return echo.NewHTTPError(http.StatusUnauthorized, "Отсутствует или некорректное имя пользователя в токене")
-	}
-
-	exp, ok := claims["exp"].(float64)
-	if !ok || exp < float64(time.Now().Unix()) {
-		return echo.NewHTTPError(http.StatusUnauthorized, "Токен истек")
-	}
+	username, _ := claims["username"].(string)
 
 	ctx = context.WithValue(c.Request().Context(), "username", username)
 	input.RequestValidationInput.Request = c.Request().WithContext(ctx)

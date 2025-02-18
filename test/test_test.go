@@ -169,7 +169,56 @@ func TestSendCoin(t *testing.T) {
 	require.Equal(t, 1500, infoResp.JSON200.Coins)
 }
 
-func setupServer(ctx context.Context) (string, func(context.Context), error) {
+func TestCheckJWTValidation(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	url, cleanup, err := setupServer(ctx, withJWT(service.NewJWT(service.WithLifetime(time.Second))))
+	require.NoError(t, err)
+	defer cleanup(ctx)
+
+	client, err := api.NewClientWithResponses(url)
+	require.NoError(t, err)
+
+	authBody := api.PostApiAuthJSONRequestBody{
+		Username: "testuser",
+		Password: "testpassword",
+	}
+
+	authResp, err := client.PostApiAuthWithResponse(ctx, authBody)
+	require.NoError(t, err)
+
+	require.Equal(t, http.StatusOK, authResp.StatusCode())
+	require.NotNil(t, authResp.JSON200.Token)
+
+	time.Sleep(time.Second)
+
+	infoResp, err := client.GetApiInfoWithResponse(ctx, withToken(*authResp.JSON200.Token))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusUnauthorized, infoResp.StatusCode())
+}
+
+type serverOptions struct {
+	jwt *service.JWT
+}
+type serverOption func(opts *serverOptions)
+
+func withJWT(jwt *service.JWT) serverOption {
+	return func(o *serverOptions) {
+		o.jwt = jwt
+	}
+}
+
+func setupServer(ctx context.Context, opts ...serverOption) (string, func(context.Context), error) {
+	o := new(serverOptions)
+	for _, opt := range opts {
+		opt(o)
+	}
+	if o.jwt == nil {
+		o.jwt = service.NewJWT()
+	}
+
 	container, connStr, err := setupDB(ctx)
 	if err != nil {
 		return "", nil, err
@@ -181,7 +230,7 @@ func setupServer(ctx context.Context) (string, func(context.Context), error) {
 		return "", nil, err
 	}
 
-	a := api.New(service.New(repository.New(pool), service.NewJWT(), service.NewBcrypt()))
+	a := api.New(service.New(repository.New(pool), o.jwt, service.NewBcrypt()))
 
 	e := echo.New()
 	e.HTTPErrorHandler = api.ErrHandler

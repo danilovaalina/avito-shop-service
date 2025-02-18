@@ -2,14 +2,12 @@ package service
 
 import (
 	"context"
-	"time"
+	_ "time"
 
 	"github.com/cockroachdb/errors"
 
 	"avito-shop-service/internal/model"
 )
-
-const defaultTokenLifetime = 24 * time.Hour
 
 type Repository interface {
 	GetUser(ctx context.Context, username string) (model.User, error)
